@@ -1,22 +1,16 @@
 package telran.net;
 
-import java.io.BufferedReader;
-import java.io.Closeable;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintStream;
-import java.net.Socket;
+import java.io.*;
+import java.net.*;
 import java.time.Instant;
 
 import org.json.JSONObject;
 
-import static telran.net.TcpConfigurationProperties.DEFAULT_INTERVAL_CONNECTION;
-import static telran.net.TcpConfigurationProperties.DEFAULT_TRIALS_NUMBER_CONNECTION;
-import static telran.net.TcpConfigurationProperties.RESPONSE_CODE_FIELD;
-import static telran.net.TcpConfigurationProperties.RESPONSE_DATA_FIELD;
 import telran.net.exceptions.ServerUnavailableException;
 
-public class TcpClient implements Closeable {
+import static telran.net.TcpConfigurationProperties.*;
+
+public class TcpClient implements Closeable, NetworkClient {
     Socket socket;
     PrintStream writer;
     BufferedReader reader;
@@ -68,6 +62,7 @@ public class TcpClient implements Closeable {
         }
        
     }
+    @Override
     public String sendAndReceive(String requestType, String requestData) {
         Request request = new Request(requestType, requestData);
        
