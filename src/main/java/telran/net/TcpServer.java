@@ -10,6 +10,7 @@ public TcpServer(Protocol protocol, int port) {
 }
     @Override
     public void run() {
+        //FIXME add SocketTimeOut handling for shutdown 
        try (ServerSocket serverSocket = new ServerSocket(port)) {
          System.out.println("Server is listening on the port "+ port);
             while(true) {
@@ -22,6 +23,11 @@ public TcpServer(Protocol protocol, int port) {
        } catch (Exception e) {
         System.out.println(e);
        }
+    }
+    
+    public void shutdown() {
+        //TODO
+        //In the ExecutorService framework to provide shutdownNow (to ignore all not processing client sessions)
     }
 
 }
