@@ -1,33 +1,44 @@
 package telran.net;
+
+import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-public class TcpServer implements Runnable{
-Protocol protocol;
-int port;
-public TcpServer(Protocol protocol, int port) {
-    this.protocol = protocol;
-    this.port = port;
-}
-    @Override
-    public void run() {
-        //FIXME add SocketTimeOut handling for shutdown 
-       try (ServerSocket serverSocket = new ServerSocket(port)) {
-         System.out.println("Server is listening on the port "+ port);
-            while(true) {
-                Socket socket = serverSocket.accept();
-                var session = new TcpClientServerSession(protocol, socket);
-                Thread thread = new Thread(session);
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-                thread.start();
+public class TcpServer {
+    volatile static boolean isShuttingDown = false;
+    private final int port;
+    private final Protocol protocol;
+    private final ExecutorService executorService;
+
+    public TcpServer(int port, Protocol protocol, int maxThreads) {
+        this.port = port;
+        this.protocol = protocol;
+        this.executorService = Executors.newFixedThreadPool(maxThreads);
+    }
+
+    public void start() throws IOException {
+        try (ServerSocket serverSocket = new ServerSocket(port)) {
+            while (!isShuttingDown) {
+                try {
+                    Socket socket = serverSocket.accept();
+                    socket.setSoTimeout(1000);
+                    if (isShuttingDown) {
+                        socket.close();
+                    } else {
+                        executorService.execute(new TcpClientServerSession(protocol, socket, 1,10));
+                    }
+                } catch (IOException e) {
+                    if (isShuttingDown) break;
+                }
             }
-       } catch (Exception e) {
-        System.out.println(e);
-       }
-    }
-    
-    public void shutdown() {
-        //TODO
-        //In the ExecutorService framework to provide shutdownNow (to ignore all not processing client sessions)
+        } finally {
+            executorService.shutdownNow();
+        }
     }
 
+    public void shutdown() {
+        isShuttingDown = true;
+    }
 }
