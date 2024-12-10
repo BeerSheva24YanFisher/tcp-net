@@ -1,14 +1,20 @@
 package telran.net;
 
-import java.io.*;
-import java.net.*;
+import java.io.BufferedReader;
+import java.io.Closeable;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintStream;
+import java.net.Socket;
 import java.time.Instant;
 
 import org.json.JSONObject;
 
+import static telran.net.TcpConfigurationProperties.DEFAULT_INTERVAL_CONNECTION;
+import static telran.net.TcpConfigurationProperties.DEFAULT_TRIALS_NUMBER_CONNECTION;
+import static telran.net.TcpConfigurationProperties.RESPONSE_CODE_FIELD;
+import static telran.net.TcpConfigurationProperties.RESPONSE_DATA_FIELD;
 import telran.net.exceptions.ServerUnavailableException;
-
-import static telran.net.TcpConfigurationProperties.*;
 
 public class TcpClient implements Closeable, NetworkClient {
     Socket socket;
@@ -45,37 +51,44 @@ public class TcpClient implements Closeable, NetworkClient {
             }
 
         } while (count != 0);
-        if(socket == null) {
+        if (socket == null) {
             throw new ServerUnavailableException(host, port);
         }
     }
 
     private void waitForInterval() {
         Instant finish = Instant.now().plusMillis(interval);
-        while(Instant.now().isBefore(finish));
+        while (Instant.now().isBefore(finish))
+            ;
     }
 
     @Override
     public void close() throws IOException {
-        if(socket != null) {
+        if (socket != null) {
             socket.close();
         }
-       
+
     }
+
     @Override
     public String sendAndReceive(String requestType, String requestData) {
         Request request = new Request(requestType, requestData);
-       
+
         try {
-            if(socket == null) {
+            if (socket == null) {
+
                 throw new ServerUnavailableException(host, port);
             }
             writer.println(request);
             String responseJSON = reader.readLine();
+            if (responseJSON == null) {
+              
+                throw new ServerUnavailableException(host, port);
+            }
             JSONObject jsonObj = new JSONObject(responseJSON);
             ResponseCode responseCode = jsonObj.getEnum(ResponseCode.class, RESPONSE_CODE_FIELD);
             String responseData = jsonObj.getString(RESPONSE_DATA_FIELD);
-            if(responseCode != ResponseCode.OK) {
+            if (responseCode != ResponseCode.OK) {
                 throw new RuntimeException(responseData);
             }
             return responseData;

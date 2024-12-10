@@ -1,46 +1,70 @@
 package telran.net;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintStream;
-import java.net.Socket;
-import java.net.SocketTimeoutException;
-public class TcpClientServerSession implements Runnable{
+
+import java.net.*;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.io.*;
+
+public class TcpClientServerSession implements Runnable {
     Protocol protocol;
     Socket socket;
-    private final int maxRequestsPerSecond;
-    private final int maxFailedResponses;
-    private int requestCount = 0;
-    private int failedResponseCount = 0;
+    TcpServer server;
+    int idleTimeout;
+    int requestsPerSecond;
+    int nonOkResponses;
+    Instant timestamp = Instant.now();
 
-public TcpClientServerSession(Protocol protocol, Socket socket, int maxRequestsPerSecond, int maxFailedResponses) {
-    this.protocol = protocol;
-    this.socket = socket;
-    this.maxRequestsPerSecond = maxRequestsPerSecond;
-    this.maxFailedResponses = maxFailedResponses;
-}
-@Override
-public void run() {
-    try (BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-         PrintStream writer = new PrintStream(socket.getOutputStream())) {
-        String request;
-        while (!Thread.currentThread().isInterrupted() && (request = reader.readLine()) != null) {
-            try {
-                String response = protocol.getResponseWithJSON(request);
-                writer.println(response);
-            } catch (Exception e) {
-                if (TcpServer.isShuttingDown) break;
+    public TcpClientServerSession(Protocol protocol, Socket socket, TcpServer server) {
+        this.protocol = protocol;
+        this.socket = socket;
+        this.server = server;
+    }
+
+    @Override
+    public void run() {
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                PrintStream writer = new PrintStream(socket.getOutputStream())) {
+            String request = null;
+            while (!server.executor.isShutdown() && !isIdleTimeout()) {
+                try {
+                    request = reader.readLine();
+                    if (request == null || isRequestsPerSecond()) {
+                        break;
+                    }
+                    String response = protocol.getResponseWithJSON(request);
+                    if (isNonOkResponses(response)) {
+                        break;
+                    }
+                    writer.println(response);
+                } catch (SocketTimeoutException e) {
+                    idleTimeout += server.socketTimeout;
+                }
             }
-        }
-    } catch (Exception e) {
-        e.printStackTrace();
-    } finally {
-        try {
             socket.close();
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            System.out.println(e);
         }
     }
-}
+
+    private boolean isRequestsPerSecond() {
+        Instant current = Instant.now();
+        if (ChronoUnit.SECONDS.between(timestamp, current) > 1) {
+            requestsPerSecond = 0;
+            timestamp = current;
+        } else {
+            requestsPerSecond++;
+        }
+        return requestsPerSecond > server.limitRequestsPerSecond;
+    }
+
+    private boolean isNonOkResponses(String response) {
+        nonOkResponses = response.contains("OK") ? 0 : nonOkResponses + 1;
+        return nonOkResponses > server.limitNonOkResponsesInRow;
+    }
+
+    private boolean isIdleTimeout() {
+        return idleTimeout > server.idleConnectionTimeout;
+    }
 
 }
